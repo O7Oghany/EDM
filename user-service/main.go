@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 
 	"github.com/O7Oghany/EDM/models"
 	"github.com/confluentinc/confluent-kafka-go/kafka"
@@ -31,12 +33,33 @@ func main() {
 
 	defer producer.Close()
 
-	userID := "123"
-	userName := "AegisAnkh"
-	event := "user_created"
-	message := []byte(fmt.Sprintf("UserCreated,%s,%s", userID, userName))
+	http.HandleFunc("/user/create", func(w http.ResponseWriter, r *http.Request) {
+        userID := r.URL.Query().Get("userID")
+        userName := r.URL.Query().Get("userName")
+        message := []byte(fmt.Sprintf("UserCreated,%s,%s", userID, userName))
+        sendMessage(producer, "UserEvents", message)
+    })
+	http.HandleFunc("/user/update", func(w http.ResponseWriter, r *http.Request) {
+        userID := r.URL.Query().Get("userID")
+        userName := r.URL.Query().Get("userName")
+        message := []byte(fmt.Sprintf("UserUpdated,%s,%s", userID, userName))
+        sendMessage(producer, "UserEvents", message)
+    })
+	http.HandleFunc("/user/delete", func(w http.ResponseWriter, r *http.Request) {
+        userID := r.URL.Query().Get("userID")
+        message := []byte(fmt.Sprintf("UserDeleted,%s,", userID))
+        sendMessage(producer, "UserEvents", message)
+    })
 
-	sendMessage(producer, event, message)
+    http.HandleFunc("/user/login", func(w http.ResponseWriter, r *http.Request) {
+        userID := r.URL.Query().Get("userID")
+        userName := r.URL.Query().Get("userName")
+        message := []byte(fmt.Sprintf("UserLoggedIn,%s,%s", userID, userName))
+        sendMessage(producer, "UserEvents", message)
+    })
+
+	
+	
 }
 
 func sendMessage(producer *kafka.Producer, topic string, message []byte) {
