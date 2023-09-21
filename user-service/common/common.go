@@ -1,8 +1,20 @@
 package common
 
-import "github.com/confluentinc/confluent-kafka-go/kafka"
+import (
+	"log"
 
-func sendMessage(producer *kafka.Producer, topic string, message []byte) {
+	"github.com/confluentinc/confluent-kafka-go/kafka"
+)
+
+type Message struct {
+}
+
+// MessageSender interface
+type MessageSender interface {
+	SendMessage(topic string, message []byte)
+}
+
+func (m *Message) SendMessage(producer *kafka.Producer, topic string, message []byte) {
 	deliveryChan := make(chan kafka.Event)
 	err := producer.Produce(&kafka.Message{
 		TopicPartition: kafka.TopicPartition{Topic: &topic, Partition: kafka.PartitionAny},
@@ -15,13 +27,13 @@ func sendMessage(producer *kafka.Producer, topic string, message []byte) {
 	}
 
 	e := <-deliveryChan
-	m := e.(*kafka.Message)
+	deliveryMessage := e.(*kafka.Message)
 
-	if m.TopicPartition.Error != nil {
-		log.Printf("Delivery failed: %v", m.TopicPartition.Error)
+	if deliveryMessage.TopicPartition.Error != nil {
+		log.Printf("Delivery failed: %v", deliveryMessage.TopicPartition.Error)
 	} else {
 		log.Printf("Delivered message to topic %s [%d] at offset %v",
-			*m.TopicPartition.Topic, m.TopicPartition.Partition, m.TopicPartition.Offset)
+			*deliveryMessage.TopicPartition.Topic, deliveryMessage.TopicPartition.Partition, deliveryMessage.TopicPartition.Offset)
 	}
 	close(deliveryChan)
 }
