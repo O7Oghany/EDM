@@ -1,4 +1,6 @@
 {
     "terminal.integrated.fontFamily": "MesloLGM Nerd Font",
-    "terminal.integrated.fontSize": 11
+    "terminal.integrated.fontSize": 11,
+    "java.compile.nullAnalysis.mode": "automatic",
+    "java.configuration.updateBuildConfiguration": "automatic"
 }

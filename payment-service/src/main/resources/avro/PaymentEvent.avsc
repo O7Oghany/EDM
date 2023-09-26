@@ -1,0 +1,12 @@
+{
+  "namespace": "net.shirazy.paymentservice.avro",
+  "type": "record",
+  "name": "PaymentEvent",
+  "fields": [
+    {"name": "userId", "type": "string"},
+    {"name": "transactionId", "type": "string"},
+    {"name": "amount", "type": "double"},
+    {"name": "timestamp", "type": "string"},
+    {"name": "status", "type": "string"}
+  ]
+}
