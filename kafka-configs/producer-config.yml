@@ -7,6 +7,6 @@ buffer.memory: 33554432
 key.serializer: "org.apache.kafka.common.serialization.StringSerializer"
 value.serializer: "org.apache.kafka.common.serialization.StringSerializer"
 security.protocol: SSL
-ssl.ca.location: "../secrets/kafka-1.crt"
+ssl.ca.location: "../secrets/ca.crt"
 
 

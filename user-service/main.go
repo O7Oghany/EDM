@@ -1,41 +1,37 @@
 package main
 
 import (
+	"context"
 	"log"
-	"net/http"
 
-	"github.com/O7Oghany/EDM/events"
-	"github.com/O7Oghany/EDM/models"
-	"github.com/confluentinc/confluent-kafka-go/kafka"
-	"github.com/gorilla/mux"
+	"github.com/O7Oghany/EDM/common"
+	"github.com/O7Oghany/EDM/internal"
 )
 
 func main() {
 
-	var kafkaProducerConfig models.ProducerConfig
+	//var wg sync.WaitGroup
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	models.ReadConfig("../kafka-configs/producer-config.yml", &kafkaProducerConfig)
+	var consumer internal.Consumer
+	var producer internal.Producer
 
-	config := &kafka.ConfigMap{
-		"debug":             "security",
-		"bootstrap.servers": kafkaProducerConfig.BootstrapServers,
-		"security.protocol": kafkaProducerConfig.SecurityProtocol,
-		"ssl.ca.location":   kafkaProducerConfig.SSLCALocation,
-		"acks":              kafkaProducerConfig.Acks,
-		"retries":           kafkaProducerConfig.Retries,
-		"batch.size":        kafkaProducerConfig.BatchSize,
-	}
-
-	producer, err := kafka.NewProducer(config)
+	producerCfg, consumerCfg, err := common.LoadConfigs()
 	if err != nil {
-		log.Fatalf("Failed to create producer: %v\nConfig: %+v", err, config)
+		log.Fatalf("Error loading configs: %v", err)
 	}
-	defer producer.Close()
-	events := events.NewEvent(producer)
-	r := mux.NewRouter()
 
-	events.InitEventHandlers(r)
-	log.Println("Server started at :8080")
-	log.Fatal(http.ListenAndServe(":8080", r))
+	//wg.Add(1)
+	go func(ctx context.Context) {
+		//defer wg.Done()
+		log.Printf("will start the go routine for consuming events")
+		consumer.ConsumeEvents(consumerCfg, ctx, cancel)
+		log.Printf("after")
+	}(ctx)
 
+	if err := producer.StartProducerServer(producerCfg); err != nil {
+		log.Fatalf("Error starting producer server: %v", err)
+	}
+	//wg.Wait()
 }

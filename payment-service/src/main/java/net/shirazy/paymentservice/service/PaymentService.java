@@ -4,6 +4,7 @@ import ch.qos.logback.classic.Logger;
 import jakarta.persistence.EntityNotFoundException;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -77,15 +78,25 @@ public class PaymentService {
     Payment existingPayment = paymentRepository
       .findById(updatedPayment.getId())
       .orElseThrow(() -> new EntityNotFoundException("Payment not found"));
-    existingPayment.setAmount(updatedPayment.getAmount());
-
-    existingPayment.setAmount(updatedPayment.getAmount());
-    existingPayment.setStatus(updatedPayment.getStatus());
+    Field[] fields = Payment.class.getDeclaredFields();
+    for (Field field : fields) {
+      try {
+        field.setAccessible(true);
+        Object newValue = field.get(updatedPayment);
+        if (newValue != null) {
+          field.set(existingPayment, newValue);
+        }
+      } catch (IllegalAccessException e) {
+        e.printStackTrace();
+        logger.error("Error while updating payment", e);
+      }
+    }
+    logger.info("user ID: {}", existingPayment.getUserId());
     Payment savedPayment = paymentRepository.save(existingPayment);
 
     publishPaymentEvent(
-      updatedPayment.getUserId(),
-      updatedPayment.getAmount(),
+      existingPayment.getUserId(),
+      existingPayment.getAmount(),
       PaymentStatus.UPDATED,
       "payment_updated_topic"
     );
