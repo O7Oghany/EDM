@@ -1,0 +1,10 @@
+{
+    "namespace": "inventory",
+    "type": "record",
+    "name": "PriceUpdated",
+    "fields": [
+        {"name": "item_id", "type": "string"},
+        {"name": "new_price", "type": "double"},
+        {"name": "timestamp", "type": "long"}
+    ]
+}

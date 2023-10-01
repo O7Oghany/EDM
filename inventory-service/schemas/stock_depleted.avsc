@@ -1,0 +1,10 @@
+{
+    "namespace": "inventory",
+    "type": "record",
+    "name": "StockDepleted",
+    "fields": [
+        {"name": "item_id", "type": "string"},
+        {"name": "remaining_stock", "type": "int"},
+        {"name": "timestamp", "type": "long"}
+    ]
+}

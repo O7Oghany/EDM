@@ -5,8 +5,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/O7Oghany/EDM/events"
-	"github.com/O7Oghany/EDM/models"
+	"github.com/O7Oghany/EDM/user-service/events"
+	"github.com/O7Oghany/EDM/user-service/models"
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/gorilla/mux"
 )

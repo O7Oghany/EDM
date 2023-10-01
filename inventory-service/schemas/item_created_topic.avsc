@@ -1,0 +1,12 @@
+{
+    "namespace": "inventory",
+    "type": "record",
+    "name": "ItemAdded",
+    "fields": [
+        {"name": "item_id", "type": "string"},
+        {"name": "name", "type": "string"},
+        {"name": "quantity", "type": "int"},
+        {"name": "price", "type": "double"},
+        {"name": "timestamp", "type": "long"}
+    ]
+}

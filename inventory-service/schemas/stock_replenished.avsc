@@ -1,0 +1,11 @@
+{
+    "namespace": "inventory",
+    "type": "record",
+    "name": "StockReplenished",
+    "fields": [
+        {"name": "item_id", "type": "string"},
+        {"name": "added_stock", "type": "int"},
+        {"name": "new_total_stock", "type": "int"},
+        {"name": "timestamp", "type": "long"}
+    ]
+}

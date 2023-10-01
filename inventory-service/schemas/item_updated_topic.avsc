@@ -1,0 +1,17 @@
+{
+    "namespace": "inventory",
+    "type": "record",
+    "name": "ItemUpdated",
+    "fields": [
+        {"name": "item_id", "type": "string"},
+        {"name": "name", "type": ["null", "string"], "default": null},
+        {"name": "brand", "type": ["null", "string"], "default": null},
+        {"name": "clock_speed", "type": ["null", "double"], "default": null},
+        {"name": "cores", "type": ["null", "int"], "default": null},
+        {"name": "price", "type": ["null", "double"], "default": null},
+        {"name": "sku", "type": ["null", "string"], "default": null},
+        {"name": "in_stock", "type": ["null", "int"], "default": null},
+        {"name": "is_available", "type": ["null", "boolean"], "default": null},
+        {"name": "timestamp", "type": "long"}
+    ]
+}

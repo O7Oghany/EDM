@@ -3,7 +3,7 @@ package common
 import (
 	"fmt"
 
-	"github.com/O7Oghany/EDM/models"
+	"github.com/O7Oghany/EDM/user-service/models"
 )
 
 func LoadConfigs() (models.ProducerConfig, models.ConsumerConfig, error) {

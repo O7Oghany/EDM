@@ -4,8 +4,8 @@ import (
 	"context"
 	"log"
 
-	"github.com/O7Oghany/EDM/common"
-	"github.com/O7Oghany/EDM/internal"
+	"github.com/O7Oghany/EDM/user-service/common"
+	"github.com/O7Oghany/EDM/user-service/internal"
 )
 
 func main() {

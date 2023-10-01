@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/O7Oghany/EDM/models"
+	"github.com/O7Oghany/EDM/user-service/models"
 	"github.com/confluentinc/confluent-kafka-go/kafka"
 	"github.com/linkedin/goavro"
 )

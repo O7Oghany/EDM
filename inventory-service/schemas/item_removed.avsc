@@ -1,0 +1,9 @@
+{
+    "namespace": "inventory",
+    "type": "record",
+    "name": "ItemRemoved",
+    "fields": [
+        {"name": "item_id", "type": "string"},
+        {"name": "timestamp", "type": "long"}
+    ]
+}
