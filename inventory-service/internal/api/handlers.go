@@ -32,9 +32,56 @@ func NewInventoryHandler(s service.InventoryService, l logger.Logger, r router.R
 func (h *InventoryHandler) RegisterRoutes() {
 	h.router.HandleFunc("/inventory", h.AddItem).Methods("POST")
 	h.router.HandleFunc("/inventory/{id}", h.UpdateItem).Methods("PUT")
-	//h.router.HandleFunc("/inventory/{id}", h.DeleteItem).Methods("DELETE")
-	//h.router.HandleFunc("/inventory/{id}", h.GetItem).Methods("GET")
-	//h.router.HandleFunc("/inventory", h.ListItems).Methods("GET")
+	h.router.HandleFunc("/inventory/{id}", h.DeleteItem).Methods("DELETE")
+	h.router.HandleFunc("/inventory/{id}", h.GetItem).Methods("GET")
+	h.router.HandleFunc("/inventory", h.ListItems).Methods("GET")
+}
+
+func (h *InventoryHandler) GetItem(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	itemID := path.Base(r.URL.Path)
+	item, err := h.service.GetItem(ctx, itemID)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to get item: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	encodedItem, err := json.Marshal(item)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to encode item: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	_, err = w.Write(encodedItem)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to write item: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+}
+
+func (h *InventoryHandler) ListItems(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	items, err := h.service.ListItems(ctx)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to list items: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	encodedItems, err := json.Marshal(items)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to encode items: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	_, err = w.Write(encodedItems)
+	if err != nil {
+		h.logger.Error(ctx, "Failed to write items: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
 }
 
 func (h *InventoryHandler) AddItem(w http.ResponseWriter, r *http.Request) {
@@ -65,8 +112,6 @@ func (h *InventoryHandler) AddItem(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 	w.WriteHeader(http.StatusCreated)
-
-	w.WriteHeader(http.StatusCreated)
 }
 
 func (h *InventoryHandler) UpdateItem(w http.ResponseWriter, r *http.Request) {
@@ -92,7 +137,7 @@ func (h *InventoryHandler) UpdateItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	itemUpdated := models.ItemUpdated{
-		ItemId:    updatedItem.ID,
+		ItemID:    updatedItem.ID,
 		Timestamp: time.Now().UnixNano() / int64(time.Millisecond),
 	}
 
@@ -113,6 +158,27 @@ func (h *InventoryHandler) UpdateItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+func (h *InventoryHandler) DeleteItem(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	itemID := path.Base(r.URL.Path)
+	if err := h.service.DeleteItem(ctx, itemID); err != nil {
+		h.logger.Error(ctx, "Failed to delete item: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	h.updateAvroSchema(consts.ItemDeletedEvent)
+	itemRemoved := models.ItemRemoved{
+		ItemID:    itemID,
+		Timestamp: time.Now().UnixNano() / int64(time.Millisecond),
+	}
+	if err := h.service.PublishEvent(ctx, consts.ItemDeletedEvent, itemRemoved); err != nil {
+		h.logger.Error(ctx, "Failed: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+	w.WriteHeader(http.StatusAccepted)
+
 }
 func (h *InventoryHandler) updateAvroSchema(event string) {
 	schemaPath := "./schemas/" + event + ".avsc" // or however you determine your schema path

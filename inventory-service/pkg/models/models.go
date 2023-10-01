@@ -55,7 +55,7 @@ type ItemRemoved struct {
 }
 
 type ItemUpdated struct {
-	ItemId      string  `json:"item_id"`
+	ItemID      string  `json:"item_id"`
 	Name        string  `json:"name,omitempty"`
 	Brand       string  `json:"brand,omitempty"`
 	ClockSpeed  float64 `json:"clock_speed,omitempty"` // in GHz

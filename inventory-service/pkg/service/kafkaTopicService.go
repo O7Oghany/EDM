@@ -78,7 +78,7 @@ func (s *inventoryServiceImpl) publishItemAdded(ctx context.Context, data models
 
 func (s *inventoryServiceImpl) publishItemUpdated(ctx context.Context, data models.ItemUpdated) error {
 	var goFieldToAvroField = map[string]string{
-		"ItemId":      "item_id",
+		"ItemID":      "item_id",
 		"Name":        "name",
 		"Brand":       "brand",
 		"ClockSpeed":  "clock_speed",
