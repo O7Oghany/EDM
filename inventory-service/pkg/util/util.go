@@ -5,8 +5,10 @@ import (
 	"log"
 	"os"
 	"reflect"
+	"time"
 
 	"github.com/O7Oghany/EDM/inventory-service/pkg/models"
+	"github.com/linkedin/goavro"
 	"gopkg.in/yaml.v2"
 )
 
@@ -38,26 +40,78 @@ func readConfig(filename string, out interface{}) error {
 	return nil
 }
 
-func GetChangedFieldsMap(original, updated interface{}) (map[string]interface{}, error) {
-	updatedFields, err := MapUpdatedFields(original, updated)
-	if err != nil {
-		return nil, err
-	}
+/*func GetChangedAndPopulate(original, updated *models.ItemUpdated) (map[string]interface{}, error) {
+	var updatedFields map[string]interface{}
+	var err error
 
-	changedFieldsMap := make(map[string]interface{})
-	val := reflect.ValueOf(updated).Elem()
-
-	for fieldName, newValue := range updatedFields {
-		field := val.FieldByName(fieldName)
-		if field.IsValid() {
-			changedFieldsMap[fieldName] = newValue
+	if original.Original != nil && updated.Updated != nil {
+		// Map fields between the original and updated CPU models
+		updatedFields, err = MapUpdatedFields(original.Original, updated.Updated)
+		if err != nil {
+			return nil, err
 		}
+		// Populate the ItemUpdated model with these fields
+		PopulateItemUpdated(updated, updatedFields)
+	} else {
+		// This will execute if Original and Updated within ItemUpdated aren't set
+		updatedFields, err = MapUpdatedFields(original, updated)
+		if err != nil {
+			return nil, err
+		}
+		PopulateItemUpdated(updated, updatedFields)
 	}
 
-	return changedFieldsMap, nil
+	// Convert to Avro-compatible map
+	var goFieldToAvroField = map[string]string{
+		"ItemID":    "item_id",
+		"Name":      "name",
+		"InStock":   "quantity",
+		"Price":     "price",
+		"Timestamp": "timestamp",
+	}
+	avroReadyMap := RemapKeys(updatedFields, goFieldToAvroField)
+
+	return avroReadyMap, nil
+}*/
+
+func PopulateItemUpdated(updated models.CPU, original models.CPU) models.ItemUpdated {
+	event := models.ItemUpdated{
+		ItemID:    updated.ID,
+		Timestamp: time.Now().UnixNano() / int64(time.Millisecond),
+	}
+	var cores32 *int32
+	if updated.Cores != 0 {
+		cores32 = new(int32)
+		*cores32 = int32(updated.Cores)
+	}
+	var quantity32 *int32
+	if updated.InStock != 0 {
+		quantity32 = new(int32)
+		*quantity32 = int32(updated.InStock)
+	}
+	if updated.Name != original.Name {
+		event.Name = &updated.Name
+	}
+	if updated.Brand != original.Brand {
+		event.Brand = &updated.Brand
+	}
+	if updated.ClockSpeed != original.ClockSpeed {
+		event.ClockSpeed = &updated.ClockSpeed
+	}
+	if updated.Cores != original.Cores {
+		event.Cores = cores32
+	}
+	if updated.InStock != original.InStock {
+		event.Quantity = quantity32
+	}
+	if updated.Price != original.Price {
+		event.Price = &updated.Price
+	}
+
+	return event
 }
 
-func PopulateItemUpdated(itemUpdated *models.ItemUpdated, updatedFields map[string]interface{}) {
+func populateItemUpdatedReflect(itemUpdated *models.ItemUpdated, updatedFields map[string]interface{}) {
 	val := reflect.ValueOf(itemUpdated).Elem()
 	typ := val.Type()
 
@@ -69,15 +123,24 @@ func PopulateItemUpdated(itemUpdated *models.ItemUpdated, updatedFields map[stri
 
 		fieldName := typ.Field(i).Name
 		if newVal, ok := updatedFields[fieldName]; ok {
+			fmt.Printf("Before: Field: %s, Value: %v\n", fieldName, field.Interface()) // Log before
+
 			newValValue := reflect.ValueOf(newVal)
-			if newValValue.Type().AssignableTo(field.Type()) {
-				field.Set(newValValue)
+			if newValValue.Kind() != reflect.String && newValValue.Kind() != reflect.Invalid {
+				fmt.Printf("Debug: newValValue.Type().Name() = %s, newValValue.Kind() = %s\n", newValValue.Type().Name(), newValValue.Kind())
+				fieldType := newValValue.Type().Name()
+				field.Set(reflect.ValueOf(map[string]interface{}{fieldType: newVal}))
+			} else {
+				if newValValue.Type().AssignableTo(field.Type()) {
+					field.Set(newValValue)
+				}
 			}
+			fmt.Printf("After: Field: %s, Value: %v\n", fieldName, field.Interface()) // Log after
 		}
 	}
 }
 
-func MapUpdatedFields(original, updated interface{}) (map[string]interface{}, error) {
+func mapUpdatedFields(original, updated interface{}) (map[string]interface{}, error) {
 	originalValue := reflect.ValueOf(original)
 	updatedValue := reflect.ValueOf(updated)
 
@@ -89,7 +152,7 @@ func MapUpdatedFields(original, updated interface{}) (map[string]interface{}, er
 	}
 
 	if originalValue.Kind() != reflect.Struct || updatedValue.Kind() != reflect.Struct {
-		return nil, fmt.Errorf("Expecting a struct, got %v and %v", originalValue.Kind(), updatedValue.Kind())
+		return nil, fmt.Errorf("expecting a struct, got %v and %v", originalValue.Kind(), updatedValue.Kind())
 	}
 
 	updatedFields := make(map[string]interface{})
@@ -105,7 +168,7 @@ func MapUpdatedFields(original, updated interface{}) (map[string]interface{}, er
 	return updatedFields, nil
 }
 
-func RemapKeys(originalMap map[string]interface{}, keyMap map[string]string) map[string]interface{} {
+func remapKeys(originalMap map[string]interface{}, keyMap map[string]string) map[string]interface{} {
 	remapped := make(map[string]interface{})
 	for oldKey, value := range originalMap {
 		newKey, exists := keyMap[oldKey]
@@ -116,4 +179,27 @@ func RemapKeys(originalMap map[string]interface{}, keyMap map[string]string) map
 		}
 	}
 	return remapped
+}
+
+func StructToMapGeneric(item interface{}) map[string]interface{} {
+	result := make(map[string]interface{})
+	valueOf := reflect.ValueOf(item)
+	typeOf := valueOf.Type()
+
+	for i := 0; i < valueOf.NumField(); i++ {
+		field := valueOf.Field(i)
+		fieldType := typeOf.Field(i)
+
+		avroType := fieldType.Tag.Get("avro")
+		if avroType == "" {
+			continue
+		}
+
+		key := fieldType.Name
+		if field.Kind() == reflect.Ptr && !field.IsNil() {
+			result[key] = goavro.Union(avroType, field.Elem().Interface())
+		}
+	}
+
+	return result
 }

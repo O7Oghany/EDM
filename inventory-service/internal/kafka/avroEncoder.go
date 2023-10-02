@@ -2,6 +2,7 @@ package kafka
 
 import (
 	"bytes"
+	"log"
 	"os"
 
 	"github.com/linkedin/goavro"
@@ -20,7 +21,7 @@ func NewAvroEncoder(schemaPath string) (AvroEncoder, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	log.Printf("Avro schema: %s", string(avroSchemaBytes))
 	codec, err := goavro.NewCodec(string(avroSchemaBytes))
 	if err != nil {
 		return nil, err
@@ -42,7 +43,6 @@ func (a *AvroEncoderImpl) Encode(message interface{}) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Append the native Go form of the data into Avro binary buffer
 	if err := avroWriter.Append([]interface{}{message}); err != nil {
 		return nil, err
 	}

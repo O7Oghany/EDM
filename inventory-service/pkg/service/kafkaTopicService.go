@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/O7Oghany/EDM/inventory-service/internal/kafka"
 	"github.com/O7Oghany/EDM/inventory-service/pkg/consts"
 	"github.com/O7Oghany/EDM/inventory-service/pkg/models"
-	"github.com/O7Oghany/EDM/inventory-service/pkg/util"
+	"github.com/linkedin/goavro"
 )
 
 func (s *inventoryServiceImpl) PublishEvent(ctx context.Context, eventType string, payload interface{}) error {
@@ -32,13 +33,6 @@ func (s *inventoryServiceImpl) PublishEvent(ctx context.Context, eventType strin
 			return fmt.Errorf("invalid payload for event type %s", eventType)
 		}
 		return s.publishItemRemoved(ctx, data)
-	case consts.PriceUpdatedEvent:
-		data, ok := payload.(models.PriceUpdated)
-		if !ok {
-			s.logger.Error(ctx, "invalid payload for event type %s", eventType)
-			return fmt.Errorf("invalid payload for event type %s", eventType)
-		}
-		return s.publishPriceUpdated(ctx, data)
 	case consts.StockDepletedEvent:
 		data, ok := payload.(models.StockDepleted)
 		if !ok {
@@ -60,15 +54,18 @@ func (s *inventoryServiceImpl) PublishEvent(ctx context.Context, eventType strin
 }
 
 func (s *inventoryServiceImpl) publishItemAdded(ctx context.Context, data models.ItemAdded) error {
-	topic := consts.ItemCreatedEvent
-	itemMap := map[string]interface{}{
+	if err := s.updateAvroSchema(consts.ItemCreatedEvent); err != nil {
+		s.logger.Error(ctx, "Failed to update Avro schema: %v", err)
+		return err
+	}
+	item := map[string]interface{}{
 		"item_id":   data.ItemID,
 		"name":      data.Name,
 		"quantity":  data.Quantity,
 		"price":     data.Price,
 		"timestamp": data.Timestamp,
 	}
-	err := s.producer.SendMessageWithAvro(ctx, topic, itemMap)
+	err := s.producer.SendMessageWithAvro(ctx, consts.ItemCreatedEvent, item)
 	if err != nil {
 		s.logger.Error(ctx, "Failed to publish ItemAdded event: %v", err)
 		return err
@@ -77,51 +74,63 @@ func (s *inventoryServiceImpl) publishItemAdded(ctx context.Context, data models
 }
 
 func (s *inventoryServiceImpl) publishItemUpdated(ctx context.Context, data models.ItemUpdated) error {
-	var goFieldToAvroField = map[string]string{
-		"ItemID":      "item_id",
-		"Name":        "name",
-		"Brand":       "brand",
-		"ClockSpeed":  "clock_speed",
-		"Cores":       "cores",
-		"Price":       "price",
-		"SKU":         "sku",
-		"Quantity":    "quantity",
-		"IsAvailable": "is_available",
-		"Timestamp":   "timestamp",
-	}
-
-	originalData := models.ItemUpdated{}
-	changedFields, err := util.GetChangedFieldsMap(&originalData, &data)
-	if err != nil {
-		s.logger.Error(ctx, "Failed to map updated fields: %v", err)
+	if err := s.updateAvroSchema(consts.ItemUpdatedEvent); err != nil {
+		s.logger.Error(ctx, "Failed to update Avro schema: %v", err)
 		return err
 	}
-
-	avroReadyMap := util.RemapKeys(changedFields, goFieldToAvroField)
-
-	err = s.producer.SendMessageWithAvro(ctx, consts.ItemUpdatedEvent, avroReadyMap)
+	avroData := structToMap(data)
+	err := s.producer.SendMessageWithAvro(ctx, consts.ItemUpdatedEvent, avroData)
 	if err != nil {
 		s.logger.Error(ctx, "Failed to publish ItemUpdated event: %v", err)
 		return err
 	}
+	s.logger.Info(ctx, "published ItemUpdated event", "item", avroData)
 	return nil
+}
+
+func structToMap(item models.ItemUpdated) map[string]interface{} {
+	result := make(map[string]interface{})
+	result["item_id"] = item.ItemID
+	result["timestamp"] = item.Timestamp
+
+	if item.Name != nil {
+		result["name"] = goavro.Union("string", *item.Name)
+	}
+	if item.Brand != nil {
+		result["brand"] = goavro.Union("string", *item.Brand)
+	}
+	if item.ClockSpeed != nil {
+		result["clock_speed"] = goavro.Union("double", *item.ClockSpeed)
+	}
+	if item.Cores != nil {
+		result["cores"] = goavro.Union("int", *item.Cores)
+	}
+	if item.Price != nil {
+		result["price"] = goavro.Union("double", *item.Price)
+	}
+	if item.SKU != nil {
+		result["sku"] = goavro.Union("string", *item.SKU)
+	}
+	if item.Quantity != nil {
+		result["quantity"] = goavro.Union("int", *item.Quantity)
+	}
+	if item.IsAvailable != nil {
+		result["is_available"] = goavro.Union("boolean", *item.IsAvailable)
+	}
+
+	return result
 }
 
 func (s *inventoryServiceImpl) publishItemRemoved(ctx context.Context, data models.ItemRemoved) error {
 	topic := consts.ItemDeletedEvent
-	err := s.producer.SendMessageWithAvro(ctx, topic, data)
+	item := map[string]interface{}{
+		"item_id":   data.ItemID,
+		"timestamp": data.Timestamp,
+	}
+	s.logger.Info(ctx, "publishing item removed event", "item", item)
+	err := s.producer.SendMessageWithAvro(ctx, topic, item)
 	if err != nil {
 		s.logger.Error(ctx, "Failed to publish ItemRemoved event: %v", err)
-		return err
-	}
-	return nil
-}
-
-func (s *inventoryServiceImpl) publishPriceUpdated(ctx context.Context, data models.PriceUpdated) error {
-	topic := consts.PriceUpdatedEvent
-	err := s.producer.SendMessageWithAvro(ctx, topic, data)
-	if err != nil {
-		s.logger.Error(ctx, "Failed to publish PriceUpdated event: %v", err)
 		return err
 	}
 	return nil
@@ -144,5 +153,17 @@ func (s *inventoryServiceImpl) publishStockDepleted(ctx context.Context, data mo
 		s.logger.Error(ctx, "Failed to publish StockDepleted event: %v", err)
 		return err
 	}
+	return nil
+}
+
+func (s *inventoryServiceImpl) updateAvroSchema(event string) error {
+	schemaPath := "./schemas/" + event + ".avsc" // or however you determine your schema path
+
+	avroEncoder, err := kafka.NewAvroEncoder(schemaPath)
+	if err != nil {
+		s.logger.Error(context.TODO(), "Failed to create Avro encoder: %v", err)
+		return err
+	}
+	s.producer.UpdateAvroEncoder(avroEncoder)
 	return nil
 }

@@ -4,15 +4,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"path"
-	"time"
 
-	"github.com/O7Oghany/EDM/inventory-service/internal/kafka"
 	"github.com/O7Oghany/EDM/inventory-service/internal/router"
-	"github.com/O7Oghany/EDM/inventory-service/pkg/consts"
 	"github.com/O7Oghany/EDM/inventory-service/pkg/logger"
 	"github.com/O7Oghany/EDM/inventory-service/pkg/models"
 	"github.com/O7Oghany/EDM/inventory-service/pkg/service"
-	"github.com/O7Oghany/EDM/inventory-service/pkg/util"
 )
 
 type InventoryHandler struct {
@@ -98,19 +94,6 @@ func (h *InventoryHandler) AddItem(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
-	h.updateAvroSchema(consts.ItemCreatedEvent)
-	itemAdded := models.ItemAdded{
-		ItemID:    item.ID,
-		Name:      item.Name,
-		Quantity:  item.InStock, // This assumes InStock is the correct field for Quantity
-		Price:     item.Price,
-		Timestamp: time.Now().UnixNano() / int64(time.Millisecond),
-	}
-
-	if err := h.service.PublishEvent(ctx, consts.ItemCreatedEvent, itemAdded); err != nil {
-		h.logger.Error(ctx, "Failed: %v", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-	}
 	w.WriteHeader(http.StatusCreated)
 }
 
@@ -121,7 +104,7 @@ func (h *InventoryHandler) UpdateItem(w http.ResponseWriter, r *http.Request) {
 	originalItem, err := h.service.GetItem(ctx, itemID)
 	if err != nil {
 		h.logger.Error(ctx, "Failed to get item: %v", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		http.Error(w, "Id not found", http.StatusBadRequest)
 		return
 	}
 
@@ -130,31 +113,10 @@ func (h *InventoryHandler) UpdateItem(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-	updatedFields, err := util.MapUpdatedFields(originalItem, updatedItem)
-	if err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	itemUpdated := models.ItemUpdated{
-		ItemID:    updatedItem.ID,
-		Timestamp: time.Now().UnixNano() / int64(time.Millisecond),
-	}
-
-	// Populate only updated fields in ItemUpdated
-	util.PopulateItemUpdated(&itemUpdated, updatedFields)
-
-	if err := h.service.UpdateItem(ctx, updatedItem); err != nil {
+	if err := h.service.UpdateItem(ctx, *originalItem, updatedItem); err != nil {
 		h.logger.Error(ctx, "Failed to update item: %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
-	}
-
-	h.updateAvroSchema(consts.ItemUpdatedEvent)
-
-	if err := h.service.PublishEvent(ctx, consts.ItemUpdatedEvent, itemUpdated); err != nil {
-		h.logger.Error(ctx, "Failed: %v", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -163,29 +125,18 @@ func (h *InventoryHandler) UpdateItem(w http.ResponseWriter, r *http.Request) {
 func (h *InventoryHandler) DeleteItem(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	itemID := path.Base(r.URL.Path)
+
+	if _, err := h.service.GetItem(ctx, itemID); err != nil {
+		h.logger.Error(ctx, "Failed to get item: %v", err)
+		http.Error(w, "Id not found", http.StatusBadRequest)
+		return
+	}
+
 	if err := h.service.DeleteItem(ctx, itemID); err != nil {
 		h.logger.Error(ctx, "Failed to delete item: %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
-	h.updateAvroSchema(consts.ItemDeletedEvent)
-	itemRemoved := models.ItemRemoved{
-		ItemID:    itemID,
-		Timestamp: time.Now().UnixNano() / int64(time.Millisecond),
-	}
-	if err := h.service.PublishEvent(ctx, consts.ItemDeletedEvent, itemRemoved); err != nil {
-		h.logger.Error(ctx, "Failed: %v", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-	}
+
 	w.WriteHeader(http.StatusAccepted)
-
-}
-func (h *InventoryHandler) updateAvroSchema(event string) {
-	schemaPath := "./schemas/" + event + ".avsc" // or however you determine your schema path
-
-	avroEncoder, err := kafka.NewAvroEncoder(schemaPath)
-	if err != nil {
-		return
-	}
-	h.service.UpdateAvroEncoder(avroEncoder)
 }
