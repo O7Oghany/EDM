@@ -26,6 +26,7 @@ func LoadConfigs() (models.ProducerConfig, models.ConsumerConfig, error) {
 
 	return kafkaProducerConfig, kafkaConsumerConfig, nil
 }
+
 func readConfig(filename string, out interface{}) error {
 	file, err := os.ReadFile(filename)
 	if err != nil {
@@ -40,40 +41,6 @@ func readConfig(filename string, out interface{}) error {
 	}
 	return nil
 }
-
-/*func GetChangedAndPopulate(original, updated *models.ItemUpdated) (map[string]interface{}, error) {
-	var updatedFields map[string]interface{}
-	var err error
-
-	if original.Original != nil && updated.Updated != nil {
-		// Map fields between the original and updated CPU models
-		updatedFields, err = MapUpdatedFields(original.Original, updated.Updated)
-		if err != nil {
-			return nil, err
-		}
-		// Populate the ItemUpdated model with these fields
-		PopulateItemUpdated(updated, updatedFields)
-	} else {
-		// This will execute if Original and Updated within ItemUpdated aren't set
-		updatedFields, err = MapUpdatedFields(original, updated)
-		if err != nil {
-			return nil, err
-		}
-		PopulateItemUpdated(updated, updatedFields)
-	}
-
-	// Convert to Avro-compatible map
-	var goFieldToAvroField = map[string]string{
-		"ItemID":    "item_id",
-		"Name":      "name",
-		"InStock":   "quantity",
-		"Price":     "price",
-		"Timestamp": "timestamp",
-	}
-	avroReadyMap := RemapKeys(updatedFields, goFieldToAvroField)
-
-	return avroReadyMap, nil
-}*/
 
 func PopulateItemUpdated(updated models.CPU, original models.CPU) models.ItemUpdated {
 	event := models.ItemUpdated{
@@ -138,4 +105,20 @@ func StructToMapGeneric(item interface{}) map[string]interface{} {
 		}
 	}
 	return result
+}
+func PopulateStockDepleted(cpu models.CPU, remainingStock int32) *models.StockDepleted {
+	return &models.StockDepleted{
+		ItemID:         cpu.ID,
+		RemainingStock: remainingStock,
+		Timestamp:      time.Now().UnixNano() / 1e6, // converting to milliseconds
+	}
+}
+
+func PopulateStockReplenished(cpu models.CPU, addedStock int32, newTotalStock int32) *models.StockReplenished {
+	return &models.StockReplenished{
+		ItemID:        cpu.ID,
+		AddedStock:    addedStock,
+		NewTotalStock: newTotalStock,
+		Timestamp:     time.Now().UnixNano() / 1e6, // converting to milliseconds
+	}
 }

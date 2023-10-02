@@ -45,7 +45,7 @@ func (s *inventoryServiceImpl) UpdateAvroEncoder(avroEncoder kafka.AvroEncoder) 
 
 func (s *inventoryServiceImpl) AddItem(ctx context.Context, cpu models.CPU) error {
 	if err := s.db.CreateItem(ctx, cpu); err != nil {
-		s.logger.Error(ctx, "failed to create item", "error", err)
+		s.logger.Error(ctx, "failed to create item", "error: ", err)
 		return err
 	}
 	itemAdded := models.ItemAdded{
@@ -57,10 +57,20 @@ func (s *inventoryServiceImpl) AddItem(ctx context.Context, cpu models.CPU) erro
 	}
 
 	if err := s.PublishEvent(ctx, consts.ItemCreatedEvent, itemAdded); err != nil {
-		s.logger.Error(ctx, "Failed: %v", err)
+		s.logger.Error(ctx, "Failed to publish events", "Error: ", err)
 		return err
 	}
-
+	if cpu.InStock <= 0 {
+		if err := s.handleStockDepleted(ctx, cpu); err != nil {
+			s.logger.Error(ctx, "Failed to handle Stock Depleted", "Error: ", err)
+			return err
+		}
+	} else {
+		if err := s.handleStockReplenished(ctx, cpu, int32(cpu.InStock)); err != nil {
+			s.logger.Error(ctx, "Failed to handle Stock Replenished", "Error: ", err)
+			return err
+		}
+	}
 	s.logger.Info(ctx, "item created successfully", "id", cpu.ID)
 	return nil
 }
@@ -70,14 +80,28 @@ func (s *inventoryServiceImpl) UpdateItem(ctx context.Context, originalCPU model
 		s.logger.Info(ctx, "no change in item, skipping update", "id", updatedCPU.ID)
 		return nil
 	}
+	updatedCPU.ID = originalCPU.ID
 	if err := s.db.UpdateItem(ctx, updatedCPU); err != nil {
 		s.logger.Error(ctx, "failed to update item", "error", err)
 		return err
 	}
+	addedStock := int32(updatedCPU.InStock - originalCPU.InStock)
+	if updatedCPU.InStock <= 0 && originalCPU.InStock > 0 {
+		if err := s.handleStockDepleted(ctx, updatedCPU); err != nil {
+			s.logger.Error(ctx, "Failed", "Error", err)
+			return err
+		}
+	} else if updatedCPU.InStock > 0 && originalCPU.InStock <= 0 {
+		if err := s.handleStockReplenished(ctx, updatedCPU, addedStock); err != nil {
+			s.logger.Error(ctx, "Failed", "Error", err)
+			return err
+		}
+	}
+
 	kafkaEvent := util.PopulateItemUpdated(updatedCPU, originalCPU)
-	
+
 	if err := s.PublishEvent(ctx, consts.ItemUpdatedEvent, kafkaEvent); err != nil {
-		s.logger.Error(ctx, "Failed: %v", err)
+		s.logger.Error(ctx, "Failed", err)
 		return err
 	}
 
@@ -95,11 +119,6 @@ func (s *inventoryServiceImpl) DeleteItem(ctx context.Context, id string) error 
 	itemRemoved := models.ItemRemoved{
 		ItemID:    id,
 		Timestamp: time.Now().UnixNano() / int64(time.Millisecond),
-	}
-
-	if err := s.updateAvroSchema(consts.ItemDeletedEvent); err != nil {
-		s.logger.Error(ctx, "Failed to update Avro schema: %v", err)
-		return err
 	}
 
 	if err := s.PublishEvent(ctx, consts.ItemDeletedEvent, itemRemoved); err != nil {
@@ -129,4 +148,21 @@ func (s *inventoryServiceImpl) GetItem(ctx context.Context, id string) (*models.
 		s.logger.Info(ctx, "item retrieved successfully", "id", id)
 		return cpu, nil
 	}
+}
+
+func (s *inventoryServiceImpl) handleStockDepleted(ctx context.Context, cpu models.CPU) error {
+	depletedEvent := util.PopulateStockDepleted(cpu, 0)
+	if err := s.PublishEvent(ctx, consts.StockDepletedEvent, depletedEvent); err != nil {
+		s.logger.Error(ctx, "Failed to publish StockDepleted event", "Error", err)
+		return err
+	}
+	return nil
+}
+func (s *inventoryServiceImpl) handleStockReplenished(ctx context.Context, cpu models.CPU, addedStock int32) error {
+	replenishedEvent := util.PopulateStockReplenished(cpu, addedStock, int32(cpu.InStock))
+	if err := s.PublishEvent(ctx, consts.StockReplenishedEvent, replenishedEvent); err != nil {
+		s.logger.Error(ctx, "Failed to publish StockReplenished event", "Error", err)
+		return err
+	}
+	return nil
 }

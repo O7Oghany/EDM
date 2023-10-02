@@ -15,40 +15,40 @@ func (s *inventoryServiceImpl) PublishEvent(ctx context.Context, eventType strin
 	case consts.ItemCreatedEvent:
 		data, ok := payload.(models.ItemAdded)
 		if !ok {
-			s.logger.Error(ctx, "invalid payload for event type %s", eventType)
+			s.logger.Error(ctx, "invalid payload", "for event type", eventType, "payload", payload)
 			return fmt.Errorf("invalid payload for event type %s", eventType)
 		}
 		return s.publishItemAdded(ctx, data)
 	case consts.ItemUpdatedEvent:
 		data, ok := payload.(models.ItemUpdated)
 		if !ok {
-			s.logger.Error(ctx, "invalid payload for event type %s", eventType)
+			s.logger.Error(ctx, "invalid payload", "for event type", eventType, "payload", payload)
 			return fmt.Errorf("invalid payload for event type %s", eventType)
 		}
 		return s.publishItemUpdated(ctx, data)
 	case consts.ItemDeletedEvent:
 		data, ok := payload.(models.ItemRemoved)
 		if !ok {
-			s.logger.Error(ctx, "invalid payload for event type %s", eventType)
+			s.logger.Error(ctx, "invalid payload", "for event typ", eventType, "payload", payload)
 			return fmt.Errorf("invalid payload for event type %s", eventType)
 		}
 		return s.publishItemRemoved(ctx, data)
 	case consts.StockDepletedEvent:
-		data, ok := payload.(models.StockDepleted)
+		data, ok := payload.(*models.StockDepleted)
 		if !ok {
-			s.logger.Error(ctx, "invalid payload for event type %s", eventType)
+			s.logger.Error(ctx, "invalid payload", "for event type", eventType, "payload", payload)
 			return fmt.Errorf("invalid payload for event type %s", eventType)
 		}
-		return s.publishStockDepleted(ctx, data)
+		return s.publishStockDepleted(ctx, *data)
 	case consts.StockReplenishedEvent:
-		data, ok := payload.(models.StockReplenished)
+		data, ok := payload.(*models.StockReplenished)
 		if !ok {
-			s.logger.Error(ctx, "invalid payload for event type %s", eventType)
+			s.logger.Error(ctx, "invalid payload", "for event type", eventType, "payload", payload)
 			return fmt.Errorf("invalid payload for event type %s", eventType)
 		}
-		return s.publishStockReplenished(ctx, data)
+		return s.publishStockReplenished(ctx, *data)
 	default:
-		s.logger.Error(ctx, "unknown event type %s", eventType)
+		s.logger.Error(ctx, "unknown event type", "event type: ", eventType)
 		return fmt.Errorf("unknown event type %s", eventType)
 	}
 }
@@ -90,6 +90,10 @@ func (s *inventoryServiceImpl) publishItemUpdated(ctx context.Context, data mode
 
 func (s *inventoryServiceImpl) publishItemRemoved(ctx context.Context, data models.ItemRemoved) error {
 	topic := consts.ItemDeletedEvent
+	if err := s.updateAvroSchema(consts.ItemDeletedEvent); err != nil {
+		s.logger.Error(ctx, "Failed to update Avro schema: %v", err)
+		return err
+	}
 	item := map[string]interface{}{
 		"item_id":   data.ItemID,
 		"timestamp": data.Timestamp,
@@ -105,7 +109,20 @@ func (s *inventoryServiceImpl) publishItemRemoved(ctx context.Context, data mode
 
 func (s *inventoryServiceImpl) publishStockReplenished(ctx context.Context, data models.StockReplenished) error {
 	topic := consts.StockReplenishedEvent
-	err := s.producer.SendMessageWithAvro(ctx, topic, data)
+	s.logger.Info(ctx, "publishing stock depleted event", "item", data)
+	s.logger.Info(ctx, "publishing stock depleted event", "item", data.ItemID)
+	if err := s.updateAvroSchema(consts.StockReplenishedEvent); err != nil {
+		s.logger.Error(ctx, "Failed to update Avro schema: %v", err)
+		return err
+	}
+	item := map[string]interface{}{
+		"item_id":         data.ItemID,
+		"added_stock":     data.AddedStock,
+		"new_total_stock": data.NewTotalStock,
+		"timestamp":       data.Timestamp,
+	}
+	s.logger.Info(ctx, "publishing stock depleted event", "item", item)
+	err := s.producer.SendMessageWithAvro(ctx, topic, item)
 	if err != nil {
 		s.logger.Error(ctx, "Failed to publish StockReplenished event: %v", err)
 		return err
@@ -115,7 +132,16 @@ func (s *inventoryServiceImpl) publishStockReplenished(ctx context.Context, data
 
 func (s *inventoryServiceImpl) publishStockDepleted(ctx context.Context, data models.StockDepleted) error {
 	topic := consts.StockDepletedEvent
-	err := s.producer.SendMessageWithAvro(ctx, topic, data)
+	if err := s.updateAvroSchema(consts.StockDepletedEvent); err != nil {
+		s.logger.Error(ctx, "Failed to update Avro schema: %v", err)
+		return err
+	}
+	item := map[string]interface{}{
+		"item_id":         data.ItemID,
+		"timestamp":       data.Timestamp,
+		"remaining_stock": data.RemainingStock,
+	}
+	err := s.producer.SendMessageWithAvro(ctx, topic, item)
 	if err != nil {
 		s.logger.Error(ctx, "Failed to publish StockDepleted event: %v", err)
 		return err
@@ -125,7 +151,6 @@ func (s *inventoryServiceImpl) publishStockDepleted(ctx context.Context, data mo
 
 func (s *inventoryServiceImpl) updateAvroSchema(event string) error {
 	schemaPath := "./schemas/" + event + ".avsc" // or however you determine your schema path
-
 	avroEncoder, err := kafka.NewAvroEncoder(schemaPath)
 	if err != nil {
 		s.logger.Error(context.TODO(), "Failed to create Avro encoder: %v", err)

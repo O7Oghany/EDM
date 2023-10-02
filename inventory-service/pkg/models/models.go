@@ -69,13 +69,13 @@ type ItemUpdated struct {
 
 type StockDepleted struct {
 	ItemID         string `json:"item_id"`
-	RemainingStock int    `json:"remaining_stock"`
+	RemainingStock int32    `json:"remaining_stock"`
 	Timestamp      int64  `json:"timestamp"`
 }
 
 type StockReplenished struct {
 	ItemID        string `json:"item_id"`
-	AddedStock    int    `json:"added_stock"`
-	NewTotalStock int    `json:"new_total_stock"`
+	AddedStock    int32    `json:"added_stock"`
+	NewTotalStock int32    `json:"new_total_stock"`
 	Timestamp     int64  `json:"timestamp"`
 }

@@ -52,6 +52,7 @@ func (kp *KafkaProducer) UpdateAvroEncoder(avroEncoder AvroEncoder) {
 
 func (kp *KafkaProducer) SendMessageWithAvro(ctx context.Context, topic string, message interface{}) error {
 	avroBytes, err := kp.avroEncoder.Encode(message)
+	kp.logger.Info(ctx, "Sending message to Kafka", "topic", topic, "message", message)
 	if err != nil {
 		kp.logger.Error(ctx, "Failed to Avro encode message: %v", err)
 		return err
