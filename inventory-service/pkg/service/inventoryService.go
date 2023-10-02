@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"reflect"
 	"time"
 
 	"github.com/O7Oghany/EDM/inventory-service/internal/db"
@@ -65,16 +66,16 @@ func (s *inventoryServiceImpl) AddItem(ctx context.Context, cpu models.CPU) erro
 }
 
 func (s *inventoryServiceImpl) UpdateItem(ctx context.Context, originalCPU models.CPU, updatedCPU models.CPU) error {
-	// Update item in the database
+	if reflect.DeepEqual(originalCPU, updatedCPU) {
+		s.logger.Info(ctx, "no change in item, skipping update", "id", updatedCPU.ID)
+		return nil
+	}
 	if err := s.db.UpdateItem(ctx, updatedCPU); err != nil {
 		s.logger.Error(ctx, "failed to update item", "error", err)
 		return err
 	}
-
-	// Populate only changed fields into models.ItemUpdated
 	kafkaEvent := util.PopulateItemUpdated(updatedCPU, originalCPU)
-
-	// Publish the changes
+	
 	if err := s.PublishEvent(ctx, consts.ItemUpdatedEvent, kafkaEvent); err != nil {
 		s.logger.Error(ctx, "Failed: %v", err)
 		return err

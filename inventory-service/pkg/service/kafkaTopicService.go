@@ -7,7 +7,7 @@ import (
 	"github.com/O7Oghany/EDM/inventory-service/internal/kafka"
 	"github.com/O7Oghany/EDM/inventory-service/pkg/consts"
 	"github.com/O7Oghany/EDM/inventory-service/pkg/models"
-	"github.com/linkedin/goavro"
+	"github.com/O7Oghany/EDM/inventory-service/pkg/util"
 )
 
 func (s *inventoryServiceImpl) PublishEvent(ctx context.Context, eventType string, payload interface{}) error {
@@ -78,7 +78,7 @@ func (s *inventoryServiceImpl) publishItemUpdated(ctx context.Context, data mode
 		s.logger.Error(ctx, "Failed to update Avro schema: %v", err)
 		return err
 	}
-	avroData := structToMap(data)
+	avroData := util.StructToMapGeneric(data)
 	err := s.producer.SendMessageWithAvro(ctx, consts.ItemUpdatedEvent, avroData)
 	if err != nil {
 		s.logger.Error(ctx, "Failed to publish ItemUpdated event: %v", err)
@@ -86,39 +86,6 @@ func (s *inventoryServiceImpl) publishItemUpdated(ctx context.Context, data mode
 	}
 	s.logger.Info(ctx, "published ItemUpdated event", "item", avroData)
 	return nil
-}
-
-func structToMap(item models.ItemUpdated) map[string]interface{} {
-	result := make(map[string]interface{})
-	result["item_id"] = item.ItemID
-	result["timestamp"] = item.Timestamp
-
-	if item.Name != nil {
-		result["name"] = goavro.Union("string", *item.Name)
-	}
-	if item.Brand != nil {
-		result["brand"] = goavro.Union("string", *item.Brand)
-	}
-	if item.ClockSpeed != nil {
-		result["clock_speed"] = goavro.Union("double", *item.ClockSpeed)
-	}
-	if item.Cores != nil {
-		result["cores"] = goavro.Union("int", *item.Cores)
-	}
-	if item.Price != nil {
-		result["price"] = goavro.Union("double", *item.Price)
-	}
-	if item.SKU != nil {
-		result["sku"] = goavro.Union("string", *item.SKU)
-	}
-	if item.Quantity != nil {
-		result["quantity"] = goavro.Union("int", *item.Quantity)
-	}
-	if item.IsAvailable != nil {
-		result["is_available"] = goavro.Union("boolean", *item.IsAvailable)
-	}
-
-	return result
 }
 
 func (s *inventoryServiceImpl) publishItemRemoved(ctx context.Context, data models.ItemRemoved) error {

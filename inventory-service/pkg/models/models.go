@@ -55,24 +55,17 @@ type ItemRemoved struct {
 }
 
 type ItemUpdated struct {
-	ItemID      string   `json:"item_id"`
-	Name        *string  `json:"name,omitempty"`
-	Brand       *string  `json:"brand,omitempty"`
-	ClockSpeed  *float64 `json:"clock_speed,omitempty"`
-	Cores       *int32   `json:"cores,omitempty"`
-	Price       *float64 `json:"price,omitempty"`
-	SKU         *string  `json:"sku,omitempty"`
-	Quantity    *int32   `json:"quantity,omitempty"`
-	IsAvailable *bool    `json:"is_available,omitempty"`
-	Timestamp   int64    `json:"timestamp"`
+	ItemID      string   `json:"item_id" avro:""`
+	Name        *string  `json:"name,omitempty" avro:"string"`
+	Brand       *string  `json:"brand,omitempty" avro:"string"`
+	ClockSpeed  *float64 `json:"clock_speed,omitempty" avro:"double"`
+	Cores       *int32   `json:"cores,omitempty" avro:"int"`
+	Price       *float64 `json:"price,omitempty" avro:"double"`
+	SKU         *string  `json:"sku,omitempty" avro:"string"`
+	Quantity    *int32   `json:"quantity,omitempty" avro:"int"`
+	IsAvailable *bool    `json:"is_available,omitempty" avro:"boolean"`
+	Timestamp   int64    `json:"timestamp" avro:""`
 }
-
-/*type ItemUpdated struct {
-	ItemID    string
-	Timestamp int64
-	Original  *CPU `json:"-"` // Exclude from JSON serialization
-	Updated   *CPU `json:"-"` // Exclude from JSON serialization
-}*/
 
 type StockDepleted struct {
 	ItemID         string `json:"item_id"`

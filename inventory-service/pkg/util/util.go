@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/O7Oghany/EDM/inventory-service/pkg/models"
@@ -111,76 +112,6 @@ func PopulateItemUpdated(updated models.CPU, original models.CPU) models.ItemUpd
 	return event
 }
 
-func populateItemUpdatedReflect(itemUpdated *models.ItemUpdated, updatedFields map[string]interface{}) {
-	val := reflect.ValueOf(itemUpdated).Elem()
-	typ := val.Type()
-
-	for i := 0; i < val.NumField(); i++ {
-		field := val.Field(i)
-		if !field.CanSet() {
-			continue
-		}
-
-		fieldName := typ.Field(i).Name
-		if newVal, ok := updatedFields[fieldName]; ok {
-			fmt.Printf("Before: Field: %s, Value: %v\n", fieldName, field.Interface()) // Log before
-
-			newValValue := reflect.ValueOf(newVal)
-			if newValValue.Kind() != reflect.String && newValValue.Kind() != reflect.Invalid {
-				fmt.Printf("Debug: newValValue.Type().Name() = %s, newValValue.Kind() = %s\n", newValValue.Type().Name(), newValValue.Kind())
-				fieldType := newValValue.Type().Name()
-				field.Set(reflect.ValueOf(map[string]interface{}{fieldType: newVal}))
-			} else {
-				if newValValue.Type().AssignableTo(field.Type()) {
-					field.Set(newValValue)
-				}
-			}
-			fmt.Printf("After: Field: %s, Value: %v\n", fieldName, field.Interface()) // Log after
-		}
-	}
-}
-
-func mapUpdatedFields(original, updated interface{}) (map[string]interface{}, error) {
-	originalValue := reflect.ValueOf(original)
-	updatedValue := reflect.ValueOf(updated)
-
-	if originalValue.Kind() == reflect.Ptr || originalValue.Kind() == reflect.Interface {
-		originalValue = originalValue.Elem()
-	}
-	if updatedValue.Kind() == reflect.Ptr || updatedValue.Kind() == reflect.Interface {
-		updatedValue = updatedValue.Elem()
-	}
-
-	if originalValue.Kind() != reflect.Struct || updatedValue.Kind() != reflect.Struct {
-		return nil, fmt.Errorf("expecting a struct, got %v and %v", originalValue.Kind(), updatedValue.Kind())
-	}
-
-	updatedFields := make(map[string]interface{})
-
-	for i := 0; i < originalValue.NumField(); i++ {
-		originalField := originalValue.Field(i)
-		updatedField := updatedValue.Field(i)
-
-		if !reflect.DeepEqual(originalField.Interface(), updatedField.Interface()) {
-			updatedFields[originalValue.Type().Field(i).Name] = updatedField.Interface()
-		}
-	}
-	return updatedFields, nil
-}
-
-func remapKeys(originalMap map[string]interface{}, keyMap map[string]string) map[string]interface{} {
-	remapped := make(map[string]interface{})
-	for oldKey, value := range originalMap {
-		newKey, exists := keyMap[oldKey]
-		if exists {
-			remapped[newKey] = value
-		} else {
-			remapped[oldKey] = value
-		}
-	}
-	return remapped
-}
-
 func StructToMapGeneric(item interface{}) map[string]interface{} {
 	result := make(map[string]interface{})
 	valueOf := reflect.ValueOf(item)
@@ -191,15 +122,20 @@ func StructToMapGeneric(item interface{}) map[string]interface{} {
 		fieldType := typeOf.Field(i)
 
 		avroType := fieldType.Tag.Get("avro")
+		jsonKey := fieldType.Tag.Get("json")
+		// Convert the json key to the format you need for Avro
+		avroKey := strings.Split(jsonKey, ",")[0]
+
+		// If avroType is empty, this is a non-union field
 		if avroType == "" {
-			continue
+			result[avroKey] = field.Interface()
+			continue // skip to next iteration
 		}
 
-		key := fieldType.Name
+		// If it's a pointer and not nil, this is a union field
 		if field.Kind() == reflect.Ptr && !field.IsNil() {
-			result[key] = goavro.Union(avroType, field.Elem().Interface())
+			result[avroKey] = goavro.Union(avroType, field.Elem().Interface())
 		}
 	}
-
 	return result
 }
