@@ -1,0 +1,10 @@
+{
+    "namespace": "inventory",
+    "type": "record",
+    "name": "ItemsBatchAdded",
+    "fields": [
+        {"name": "batch_id", "type": "string"},
+        {"name": "items", "type": { "type": "array", "items": "ItemAdded" }},
+        {"name": "timestamp", "type": "long"}
+    ]
+}

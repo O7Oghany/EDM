@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/O7Oghany/EDM/inventory-service/pkg/models"
+	"github.com/google/uuid"
 	"github.com/linkedin/goavro"
 	"gopkg.in/yaml.v2"
 )
@@ -106,6 +107,7 @@ func StructToMapGeneric(item interface{}) map[string]interface{} {
 	}
 	return result
 }
+
 func PopulateStockDepleted(cpu models.CPU, remainingStock int32) *models.StockDepleted {
 	return &models.StockDepleted{
 		ItemID:         cpu.ID,
@@ -121,4 +123,12 @@ func PopulateStockReplenished(cpu models.CPU, addedStock int32, newTotalStock in
 		NewTotalStock: newTotalStock,
 		Timestamp:     time.Now().UnixNano() / 1e6, // converting to milliseconds
 	}
+}
+
+func GenerateBatchID() string {
+	return fmt.Sprintf("%d", time.Now().UnixNano())
+}
+
+func GenerateBatchUUID() string {
+	return uuid.New().String()
 }

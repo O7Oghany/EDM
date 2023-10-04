@@ -62,6 +62,7 @@ func main() {
 		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
 		<-sigChan
+		cancel()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		server.Shutdown(ctx)

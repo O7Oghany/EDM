@@ -49,6 +49,11 @@ type ItemAdded struct {
 	Timestamp int64   `json:"timestamp"`
 }
 
+type ItemsBatchAdded struct {
+	BatchID   string      `json:"batch_id"`
+	Items     []ItemAdded `json:"items"`
+	Timestamp int64       `json:"timestamp"`
+}
 type ItemRemoved struct {
 	ItemID    string `json:"item_id"`
 	Timestamp int64  `json:"timestamp"`
@@ -69,13 +74,13 @@ type ItemUpdated struct {
 
 type StockDepleted struct {
 	ItemID         string `json:"item_id"`
-	RemainingStock int32    `json:"remaining_stock"`
+	RemainingStock int32  `json:"remaining_stock"`
 	Timestamp      int64  `json:"timestamp"`
 }
 
 type StockReplenished struct {
 	ItemID        string `json:"item_id"`
-	AddedStock    int32    `json:"added_stock"`
-	NewTotalStock int32    `json:"new_total_stock"`
+	AddedStock    int32  `json:"added_stock"`
+	NewTotalStock int32  `json:"new_total_stock"`
 	Timestamp     int64  `json:"timestamp"`
 }
