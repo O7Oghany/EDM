@@ -7,7 +7,6 @@ import (
 
 	"github.com/O7Oghany/EDM/inventory-service/internal/db"
 	"github.com/O7Oghany/EDM/inventory-service/internal/kafka"
-	"github.com/O7Oghany/EDM/inventory-service/pkg/consts"
 	"github.com/O7Oghany/EDM/inventory-service/pkg/logger"
 	"github.com/O7Oghany/EDM/inventory-service/pkg/models"
 	"github.com/O7Oghany/EDM/inventory-service/pkg/util"
@@ -19,8 +18,6 @@ type InventoryService interface {
 	DeleteItem(ctx context.Context, id string) error
 	GetItem(ctx context.Context, id string) (*models.CPU, error)
 	ListItems(ctx context.Context) ([]models.CPU, error)
-	PublishEvent(ctx context.Context, eventType string, payload interface{}) error
-	UpdateAvroEncoder(avroEncoder kafka.AvroEncoder) error
 }
 
 type inventoryServiceImpl struct {
@@ -38,11 +35,6 @@ func NewInventoryService(db db.InventoryDB, logger logger.Logger, producer kafka
 	}
 }
 
-func (s *inventoryServiceImpl) UpdateAvroEncoder(avroEncoder kafka.AvroEncoder) error {
-	s.avroEncoder = avroEncoder
-	return nil
-}
-
 func (s *inventoryServiceImpl) AddItem(ctx context.Context, cpu models.CPU) error {
 	if err := s.db.CreateItem(ctx, cpu); err != nil {
 		s.logger.Error(ctx, "failed to create item", "error: ", err)
@@ -56,7 +48,7 @@ func (s *inventoryServiceImpl) AddItem(ctx context.Context, cpu models.CPU) erro
 		Timestamp: time.Now().UnixNano() / int64(time.Millisecond),
 	}
 
-	if err := s.PublishEvent(ctx, consts.ItemCreatedEvent, itemAdded); err != nil {
+	if err := s.producer.PublishItemAdded(ctx, itemAdded); err != nil {
 		s.logger.Error(ctx, "Failed to publish events", "Error: ", err)
 		return err
 	}
@@ -100,7 +92,7 @@ func (s *inventoryServiceImpl) UpdateItem(ctx context.Context, originalCPU model
 
 	kafkaEvent := util.PopulateItemUpdated(updatedCPU, originalCPU)
 
-	if err := s.PublishEvent(ctx, consts.ItemUpdatedEvent, kafkaEvent); err != nil {
+	if err := s.producer.PublishItemUpdated(ctx, kafkaEvent); err != nil {
 		s.logger.Error(ctx, "Failed", err)
 		return err
 	}
@@ -121,7 +113,7 @@ func (s *inventoryServiceImpl) DeleteItem(ctx context.Context, id string) error 
 		Timestamp: time.Now().UnixNano() / int64(time.Millisecond),
 	}
 
-	if err := s.PublishEvent(ctx, consts.ItemDeletedEvent, itemRemoved); err != nil {
+	if err := s.producer.PublishItemRemoved(ctx, itemRemoved); err != nil {
 		s.logger.Error(ctx, "Failed: %v", err)
 		return err
 	}
@@ -152,15 +144,16 @@ func (s *inventoryServiceImpl) GetItem(ctx context.Context, id string) (*models.
 
 func (s *inventoryServiceImpl) handleStockDepleted(ctx context.Context, cpu models.CPU) error {
 	depletedEvent := util.PopulateStockDepleted(cpu, 0)
-	if err := s.PublishEvent(ctx, consts.StockDepletedEvent, depletedEvent); err != nil {
+	if err := s.producer.PublishStockDepleted(ctx, *depletedEvent); err != nil {
 		s.logger.Error(ctx, "Failed to publish StockDepleted event", "Error", err)
 		return err
 	}
 	return nil
 }
+
 func (s *inventoryServiceImpl) handleStockReplenished(ctx context.Context, cpu models.CPU, addedStock int32) error {
 	replenishedEvent := util.PopulateStockReplenished(cpu, addedStock, int32(cpu.InStock))
-	if err := s.PublishEvent(ctx, consts.StockReplenishedEvent, replenishedEvent); err != nil {
+	if err := s.producer.PublishStockReplenished(ctx, *replenishedEvent); err != nil {
 		s.logger.Error(ctx, "Failed to publish StockReplenished event", "Error", err)
 		return err
 	}
